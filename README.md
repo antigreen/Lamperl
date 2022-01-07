@@ -14,6 +14,7 @@ The script generates a dxf with all rib variants to assemble the generated lamph
 Code refactoring is necessary - especially in areas of big cutouts
 - [ ] new implementation as general function for circualar and non-circualr ribs
 - [ ] new shapes for cutouts (circles, ellipses, rounded or chamfered corners, diagonal bracings, ...)
+- [ ] take care about very small edges - which might get instable
 
 possible new features:
 - [ ] "low poly" variant with straight lines between the rib crossing points
