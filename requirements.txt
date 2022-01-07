@@ -1,0 +1,5 @@
+euclid3==0.1
+prettytable==0.7.2
+pypng==0.0.19
+regex==2019.12.20
+solidpython==1.0.4
