@@ -38,7 +38,7 @@ lamp_width_x = 350  # in [mm] - for construction the longer side
 lamp_width_y = 250  # in [mm] - for construction the shorter side
 lamp_height = 100    # in [mm]
 arc_height_main_rib = 30  # in [mm] - width of arc
-number_of_ribs_long_side = 12   # just odd number - for the longer side - min. 3
+number_of_ribs_long_side = 6   # just odd number - for the longer side - min. 3
 number_of_ribs_short_side = -1   # just odd number - for the shorter side -  will be calculated if value = -1
 dist_rib_edge = 10  # in [mm] - distance last rib from the edge
 
@@ -61,8 +61,10 @@ view = "3D_show"        # drawstyle in SCAD 2D_plotting for generating G-Code, 3
 # -------------------------------------------------------------------------------------------------------
 
 epsilon = 0.02      # very small adder for better cutting in OpenSCAD
-smoothness = 100    # higher number, smoother curves
+smoothness = 100    # higher number, smoother curves, langer calculation times
 
+
+# -------------------------------------------------------------------------------------------------------
 # General calculations
 
 # reverse lamp_width_x and lamp_width_y if lamp_width_y > lamp_width_x
@@ -115,6 +117,9 @@ else:
 # calculation lamp_base - baseline, where the lamp should finally sit on - different in calculation for x&y
 lamp_base_x = radius_0_x - lamp_height
 lamp_base_y = radius_0_y - lamp_height
+
+# General calculations
+# -------------------------------------------------------------------------------------------------------
 
 
 # Calculate circle coordinate 'x' at given 'z' & 'radius'
@@ -177,6 +182,7 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
     for k in range(0, number_of_ribs):
 
         z_coord = Circle_Coords_Z(k*dist_ribs, rib_radius)  # on circle from which rectangle is cut out
+
         if z_coord != -1:                                   # compliance - circle coordinate was calculated correctly
 
             if z_coord - arc_height_main_rib < lamp_base:   # check if coord approaching lamp_base - room for cutout
@@ -284,7 +290,9 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
     return rib_object
 
 
-def DrawRib_NonCircular(rib_number):
+def DrawRib_NonCircular(rib_number, lamp_base):
+    # generates ribs in y-direction
+
     increment = lamp_width_x / (2 * smoothness)
 
     polygon_coords_outer = [[0, -2 * epsilon]]
@@ -303,32 +311,38 @@ def DrawRib_NonCircular(rib_number):
     rib_object = difference()(
         polygon(polygon_coords_outer),
         polygon(polygon_coords_inner),
-        translate([-epsilon, -lamp_width_x+lamp_base_x])(
+        translate([-epsilon, -lamp_width_x+lamp_base])(
             square(size=[lamp_width_x+2*epsilon, lamp_width_x], center=False)
             )
         )
 
     # Square cutouts rib intersection non circular
-    for k in range(0, number_of_ribs_x):
 
-        z_coord = Non_Circular_Coords_Z(k * dist_ribs_x, rib_number)
+    dist_ribs = dist_ribs_x
+    cutout_location = "inner"
+    number_of_ribs = number_of_ribs_x
+
+    for k in range(0, number_of_ribs):
+
+        z_coord = Non_Circular_Coords_Z(k * dist_ribs, rib_number)
 
         if z_coord != -1:                                   # compliance - circle coordinate was calculated correctly
 
-            if z_coord - arc_height_main_rib < lamp_base_x:   # check if coord approaching lamp_base - room for cutout
-                cutout_height = z_coord - lamp_base_x         # if yes - limit cutout height
+            if z_coord - arc_height_main_rib < lamp_base:   # check if coord approaching lamp_base - room for cutout
+                cutout_height = z_coord - lamp_base         # if yes - limit cutout height
             else:
-                cutout_height = arc_height_main_rib
+                cutout_height = arc_height_main_rib           
 
             # long ribs are cut on the inner perimeter
-            if z_coord - arc_height_main_rib > lamp_base_x:
+            if z_coord - arc_height_main_rib > lamp_base:
                 z_coord -= arc_height_main_rib          # in circular area inner perimeter
             else:
-                z_coord = lamp_base_x                     # in flat area cut on flats
+                z_coord = lamp_base                     # in flat area cut on flats
 
-            cutout_square = translate([k*dist_ribs_x, z_coord]) (
-                square(size=[thickness_material+2*tolerance, cutout_height], center=True)
-                )
+            cutout_square = translate([k*dist_ribs, z_coord]) (
+            square(size=[thickness_material+2*tolerance, cutout_height], center=True)
+            )
+            
             rib_object = rib_object - cutout_square
 
     # Rib Hole cutouts non circular ribs
@@ -348,7 +362,7 @@ def DrawRib_NonCircular(rib_number):
         polygon_rib_cutout_top = [[start_polygon_x, start_polygon_top_y]]
         polygon_rib_cutout_bot = [[start_polygon_x, start_polygon_bot_y]]
 
-        lamp_cutout_bottom = lamp_base_x + rib_cutout_residue
+        lamp_cutout_bottom = lamp_base + rib_cutout_residue
 
         # non circular section of top cutout
         for n in range(0, smooth_rib_cutout + 1):
@@ -486,7 +500,7 @@ if __name__ == "__main__":
     # calculate non-circular ribs Rib_y_[1...m]
 
     for m in range(1, number_of_ribs_y):    # start at '1' cause rib_0_y is already created
-        rib_y_n = Generate_OpenSCAD_view(DrawRib_NonCircular(m), "ny", m)
+        rib_y_n = Generate_OpenSCAD_view(DrawRib_NonCircular(m, lamp_base_x), "ny", m)
         SCAD_codelist.append(scad_render(rib_y_n))  # render the SCAD-objects to SCAD-text
 
     # combine the SCAD-text and write to the named file
