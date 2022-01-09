@@ -38,13 +38,13 @@ lamp_width_x = 350  # in [mm] - for construction the longer side
 lamp_width_y = 250  # in [mm] - for construction the shorter side
 lamp_height = 100    # in [mm]
 arc_height_main_rib = 30  # in [mm] - width of arc
-number_of_ribs_long_side = 6   # just odd number - for the longer side - min. 3
+number_of_ribs_long_side = 13   # just odd number - for the longer side - min. 3
 number_of_ribs_short_side = -1   # just odd number - for the shorter side -  will be calculated if value = -1
 dist_rib_edge = 10  # in [mm] - distance last rib from the edge
 
 thickness_material = 3.0    # in [mm] - thickness of used material for lamp - adapt to your material thickness used
                             #           for manufacturing
-tolerance = 0.0             # in [mm] - tolerance for mechanical clearence 0.1-0.2mm recommended
+tolerance = 2.0             # in [mm] - tolerance for mechanical clearence 0.1-0.2mm recommended
                             # on a LaserCutter calculate Kerf in tolerance - if Kerf is 0.2mm -->
                             # set tolerance to 0mm
 
@@ -146,6 +146,43 @@ def Non_Circular_Coords_Z(x_coord, rib_number):
     return z_coord
 
 
+def Rect_Rib_Cutouts(rib_object, number_of_rbs, dist_ribs, cutout_location, lamp_base, shape, rib_radius, rib_number=0):
+
+    for k in range(0, number_of_rbs):
+
+        if shape == 'circular':
+            z_coord = Circle_Coords_Z(k*dist_ribs, rib_radius)  # on circle from which rectangle is cut out
+
+        elif shape == 'non_circular':
+            z_coord = Non_Circular_Coords_Z(k * dist_ribs, rib_number)
+
+        if z_coord != -1:                                   # compliance - circle coordinate was calculated correctly
+
+            if z_coord - arc_height_main_rib < lamp_base:   # check if coord approaching lamp_base - room for cutout
+                cutout_height = z_coord - lamp_base         # if yes - limit cutout height
+            else:
+                cutout_height = arc_height_main_rib
+
+            if cutout_location == "inner":                  # long ribs are cut on the inner perimeter
+                                                            # short ones on the outer perimeter
+                if z_coord - arc_height_main_rib > lamp_base:
+                    z_coord -= arc_height_main_rib          # in circular area inner perimeter
+                else:
+                    z_coord = lamp_base                     # in flat area cut on flats
+
+            cutout_square = translate([k*dist_ribs, z_coord]) (
+                square(size=[thickness_material+2*tolerance, cutout_height], center=True)
+                )
+
+            if cutout_location == "outer":                  # enlarge very tiny cutouts towards the top
+                cutout_square += translate([k*dist_ribs-(thickness_material/2+tolerance), z_coord])(
+                square(size=[thickness_material+2*tolerance, 500], center=False)
+                )
+
+            rib_object = rib_object - cutout_square
+
+    return rib_object
+
 # generates a half segment of a rib
 def DrawRib_Circular(rib_radius, lamp_base, move_direction):
 
@@ -179,6 +216,10 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
         print("error - rib cutout calc in Draw_Rib_circular - move_direction not 'x' or 'y'")
         return rib_object
 
+    rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'circular', rib_radius)
+
+    """
+    
     for k in range(0, number_of_ribs):
 
         z_coord = Circle_Coords_Z(k*dist_ribs, rib_radius)  # on circle from which rectangle is cut out
@@ -207,6 +248,7 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
                 )
 
             rib_object = rib_object - cutout_square
+    """    
 
     # Rib Hole cutouts circular ribs
     # TODO: drawings machen
@@ -320,8 +362,12 @@ def DrawRib_NonCircular(rib_number, lamp_base):
 
     dist_ribs = dist_ribs_x
     cutout_location = "inner"
+    rib_radius = 0
     number_of_ribs = number_of_ribs_x
 
+    rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'non_circular', rib_radius, rib_number)
+
+    """
     for k in range(0, number_of_ribs):
 
         z_coord = Non_Circular_Coords_Z(k * dist_ribs, rib_number)
@@ -344,6 +390,9 @@ def DrawRib_NonCircular(rib_number, lamp_base):
             )
             
             rib_object = rib_object - cutout_square
+    """
+
+        
 
     # Rib Hole cutouts non circular ribs
     # TODO: drawings machen
@@ -482,11 +531,15 @@ if __name__ == "__main__":
     SCAD_codelist = []          # empty list for storing the different solid-python objects
 
     # calculate circular ribs Rib_y_0 and Rib_x_[n]
+
     # the "x", "y" and "ny" indicators are for providing the movement direction of ribs as well as
     # square cutout indicators
 
+    # calculate circular ribs Rib_y_0
     rib_0_y = Generate_OpenSCAD_view(DrawRib_Circular(radius_0_y, lamp_base_y, "y"), "y", 0)
     SCAD_codelist.append(scad_render(rib_0_y))  # render the SCAD-objects to SCAD-text
+
+    # calculate circular ribs Rib_x_[n]
 
     for k in range(0, number_of_ribs_x):
         if k == 0:
@@ -498,12 +551,14 @@ if __name__ == "__main__":
         SCAD_codelist.append(scad_render(rib_x_n))  # render the SCAD-objects to SCAD-text
 
     # calculate non-circular ribs Rib_y_[1...m]
-
+    
+    
     for m in range(1, number_of_ribs_y):    # start at '1' cause rib_0_y is already created
         rib_y_n = Generate_OpenSCAD_view(DrawRib_NonCircular(m, lamp_base_x), "ny", m)
         SCAD_codelist.append(scad_render(rib_y_n))  # render the SCAD-objects to SCAD-text
-
+    
     # combine the SCAD-text and write to the named file
+    
     SCAD_code = "\n".join(SCAD_codelist)  # join the object fragments from SCAD_codelist together
 
     file_name_scad = file_name + '.scad'
