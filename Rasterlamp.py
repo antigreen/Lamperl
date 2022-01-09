@@ -183,10 +183,11 @@ def Rect_Rib_Cutouts(rib_object, number_of_rbs, dist_ribs, cutout_location, lamp
 
     return rib_object
 
-# generates a half segment of a rib
-def DrawRib_Circular(rib_radius, lamp_base, move_direction):
 
-    # create the SemiSegment
+def DrawRib_Circular(rib_radius, lamp_base, move_direction):
+    # generates circular ribs (just the half of it) (rib_y[0] and ribs_x[n])
+
+    # create the half-rib
     rib_object = difference()(
 
         # create an arc - this is the upper lamp shape
@@ -218,37 +219,7 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
 
     rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'circular', rib_radius)
 
-    """
-    
-    for k in range(0, number_of_ribs):
-
-        z_coord = Circle_Coords_Z(k*dist_ribs, rib_radius)  # on circle from which rectangle is cut out
-
-        if z_coord != -1:                                   # compliance - circle coordinate was calculated correctly
-
-            if z_coord - arc_height_main_rib < lamp_base:   # check if coord approaching lamp_base - room for cutout
-                cutout_height = z_coord - lamp_base         # if yes - limit cutout height
-            else:
-                cutout_height = arc_height_main_rib
-
-            if cutout_location == "inner":                  # long ribs are cut on the inner perimeter
-                                                            # short ones on the outer perimeter
-                if z_coord - arc_height_main_rib > lamp_base:
-                    z_coord -= arc_height_main_rib          # in circular area inner perimeter
-                else:
-                    z_coord = lamp_base                     # in flat area cut on flats
-
-            cutout_square = translate([k*dist_ribs, z_coord]) (
-                square(size=[thickness_material+2*tolerance, cutout_height], center=True)
-                )
-
-            if cutout_location == "outer":                  # enlarge very tiny cutouts towards the top
-                cutout_square += translate([k*dist_ribs-(thickness_material/2+tolerance), z_coord])(
-                square(size=[thickness_material+2*tolerance, 500], center=False)
-                )
-
-            rib_object = rib_object - cutout_square
-    """    
+ 
 
     # Rib Hole cutouts circular ribs
     # TODO: drawings machen
@@ -327,13 +298,14 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
             polygon(polygon_rib_cutout)
         )
 
+    # mirror the half-rib to create full one
     rib_object = rib_object + mirror([1, 0, 0])(rib_object)
 
     return rib_object
 
 
 def DrawRib_NonCircular(rib_number, lamp_base):
-    # generates ribs in y-direction
+    # generates non-circular ribs (just the half of it) in y-direction
 
     increment = lamp_width_x / (2 * smoothness)
 
@@ -358,41 +330,13 @@ def DrawRib_NonCircular(rib_number, lamp_base):
             )
         )
 
-    # Square cutouts rib intersection non circular
-
+    # Square cutouts rib intersection non circular (for putting ribs together)
     dist_ribs = dist_ribs_x
     cutout_location = "inner"
     rib_radius = 0
     number_of_ribs = number_of_ribs_x
 
     rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'non_circular', rib_radius, rib_number)
-
-    """
-    for k in range(0, number_of_ribs):
-
-        z_coord = Non_Circular_Coords_Z(k * dist_ribs, rib_number)
-
-        if z_coord != -1:                                   # compliance - circle coordinate was calculated correctly
-
-            if z_coord - arc_height_main_rib < lamp_base:   # check if coord approaching lamp_base - room for cutout
-                cutout_height = z_coord - lamp_base         # if yes - limit cutout height
-            else:
-                cutout_height = arc_height_main_rib           
-
-            # long ribs are cut on the inner perimeter
-            if z_coord - arc_height_main_rib > lamp_base:
-                z_coord -= arc_height_main_rib          # in circular area inner perimeter
-            else:
-                z_coord = lamp_base                     # in flat area cut on flats
-
-            cutout_square = translate([k*dist_ribs, z_coord]) (
-            square(size=[thickness_material+2*tolerance, cutout_height], center=True)
-            )
-            
-            rib_object = rib_object - cutout_square
-    """
-
-        
 
     # Rib Hole cutouts non circular ribs
     # TODO: drawings machen
@@ -471,6 +415,7 @@ def DrawRib_NonCircular(rib_number, lamp_base):
             polygon(polygon_rib_cutout)
         )
 
+    # mirror the half-rib to create full one
     rib_object = rib_object + mirror([1, 0, 0])(rib_object)
 
     return rib_object
