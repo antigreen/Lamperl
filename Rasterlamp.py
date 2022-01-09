@@ -38,7 +38,7 @@ lamp_width_x = 350  # in [mm] - for construction the longer side
 lamp_width_y = 250  # in [mm] - for construction the shorter side
 lamp_height = 100    # in [mm]
 arc_height_main_rib = 30  # in [mm] - width of arc
-number_of_ribs_long_side = 13   # just odd number - for the longer side - min. 3
+number_of_ribs_long_side = 25   # just odd number - for the longer side - min. 3
 number_of_ribs_short_side = -1   # just odd number - for the shorter side -  will be calculated if value = -1
 dist_rib_edge = 10  # in [mm] - distance last rib from the edge
 
@@ -146,9 +146,10 @@ def Non_Circular_Coords_Z(x_coord, rib_number):
     return z_coord
 
 
-def Rect_Rib_Cutouts(rib_object, number_of_rbs, dist_ribs, cutout_location, lamp_base, shape, rib_radius, rib_number=0):
+def Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, shape, rib_radius, rib_number=0):
+    # cuts out the intersecting parts of the ribs
 
-    for k in range(0, number_of_rbs):
+    for k in range(0, number_of_ribs):
 
         if shape == 'circular':
             z_coord = Circle_Coords_Z(k*dist_ribs, rib_radius)  # on circle from which rectangle is cut out
@@ -183,10 +184,103 @@ def Rect_Rib_Cutouts(rib_object, number_of_rbs, dist_ribs, cutout_location, lamp
 
     return rib_object
 
-# generates a half segment of a rib
-def DrawRib_Circular(rib_radius, lamp_base, move_direction):
 
-    # create the SemiSegment
+def Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, shape, rib_radius, rib_number=0):
+    # cuts out the "holes" in the ribs for aesthetics
+    
+    smooth_rib_cutout = int(smoothness / number_of_ribs)
+
+    increment = (dist_ribs-2*rib_cutout_residue-thickness_material) / smooth_rib_cutout
+
+    for m in range(0, number_of_ribs):
+
+        start_polygon_x = m * dist_ribs + thickness_material / 2 + rib_cutout_residue
+        
+        if shape == 'non_circular':
+            start_polygon_top_y = Non_Circular_Coords_Z(start_polygon_x, rib_number) - rib_cutout_residue
+            start_polygon_bot_y = Non_Circular_Coords_Z(start_polygon_x, rib_number) - arc_height_main_rib + rib_cutout_residue
+        elif shape == 'circular':
+            start_polygon_top_y = Circle_Coords_Z(start_polygon_x, rib_radius) - rib_cutout_residue
+            start_polygon_bot_y = Circle_Coords_Z(start_polygon_x, rib_radius) - arc_height_main_rib + rib_cutout_residue
+
+
+        polygon_rib_cutout_top = [[start_polygon_x, start_polygon_top_y]]
+        polygon_rib_cutout_bot = [[start_polygon_x, start_polygon_bot_y]]
+
+        lamp_cutout_bottom = lamp_base + rib_cutout_residue
+
+        # curved section of top cutout
+        for n in range(0, smooth_rib_cutout + 1):
+            polygon_1_x = start_polygon_x + n * increment
+            
+            if shape == 'non_circular':
+                polygon_1_y = Non_Circular_Coords_Z(polygon_1_x, rib_number) - rib_cutout_residue
+            elif shape == 'circular':
+                polygon_1_y = Circle_Coords_Z(polygon_1_x, rib_radius) - rib_cutout_residue
+
+            # case 1: triangular cutout at rib end (complete polygon)
+            if (polygon_1_y < lamp_cutout_bottom) and (start_polygon_bot_y < lamp_cutout_bottom):
+                last_x, _ = polygon_rib_cutout_top[-1]
+                polygon_rib_cutout_top.append([last_x, lamp_cutout_bottom])
+                polygon_rib_cutout_top.append([start_polygon_x, lamp_cutout_bottom])
+                break
+
+            # case 1,5: cutout with circular and flat bottom at rib end
+            elif polygon_1_y < lamp_cutout_bottom:
+                break
+
+            # normal cutout, case 2 and case 3
+            else:
+                polygon_rib_cutout_top.append([polygon_1_x, polygon_1_y])
+
+        last_x_top, last_y_top = polygon_rib_cutout_top[-1]
+
+        # curved section of bottom cutout
+        for p in range(0, smooth_rib_cutout + 1):
+            polygon_2_x = start_polygon_x + p * increment
+            
+            if shape == 'non_circular':
+                polygon_2_y = Non_Circular_Coords_Z(polygon_2_x, rib_number) - arc_height_main_rib + rib_cutout_residue
+            elif shape == 'circular':
+                polygon_2_y = Circle_Coords_Z(polygon_2_x, rib_radius) - arc_height_main_rib + rib_cutout_residue
+
+            # case 1
+            if (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top <= lamp_cutout_bottom):
+                break
+
+            # case 3
+            elif (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top > lamp_cutout_bottom):
+                polygon_rib_cutout_bot.append([polygon_2_x, lamp_cutout_bottom])
+                polygon_rib_cutout_bot.append([last_x_top, lamp_cutout_bottom])
+                break
+
+            # case 1,5 & 2
+            elif polygon_2_y < lamp_cutout_bottom:
+                last_x, _ = polygon_rib_cutout_bot[-1]
+                polygon_rib_cutout_bot.append([last_x + increment, lamp_cutout_bottom])
+                polygon_rib_cutout_bot.append([last_x_top, lamp_cutout_bottom])
+                break
+
+            # normal cutout
+            else:
+                polygon_rib_cutout_bot.append([polygon_2_x, polygon_2_y])
+
+        last_x_bot, last_y_bot = polygon_rib_cutout_bot[-1]  # will be needed für stiffening stuff in cutouts
+
+        polygon_rib_cutout = polygon_rib_cutout_top + polygon_rib_cutout_bot[::-1]
+
+        rib_object = difference()(
+            rib_object,
+            polygon(polygon_rib_cutout)
+        )
+
+    return rib_object
+
+
+def DrawRib_Circular(rib_radius, lamp_base, move_direction):
+    # generates circular ribs (just the half of it) (rib_y[0] and ribs_x[n])
+
+    # create the half-rib
     rib_object = difference()(
 
         # create an arc - this is the upper lamp shape
@@ -217,123 +311,18 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
         return rib_object
 
     rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'circular', rib_radius)
+ 
+    # Rib Hole Rectangular cutouts circular ribs
+    rib_object = Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, 'circular', rib_radius)
 
-    """
-    
-    for k in range(0, number_of_ribs):
-
-        z_coord = Circle_Coords_Z(k*dist_ribs, rib_radius)  # on circle from which rectangle is cut out
-
-        if z_coord != -1:                                   # compliance - circle coordinate was calculated correctly
-
-            if z_coord - arc_height_main_rib < lamp_base:   # check if coord approaching lamp_base - room for cutout
-                cutout_height = z_coord - lamp_base         # if yes - limit cutout height
-            else:
-                cutout_height = arc_height_main_rib
-
-            if cutout_location == "inner":                  # long ribs are cut on the inner perimeter
-                                                            # short ones on the outer perimeter
-                if z_coord - arc_height_main_rib > lamp_base:
-                    z_coord -= arc_height_main_rib          # in circular area inner perimeter
-                else:
-                    z_coord = lamp_base                     # in flat area cut on flats
-
-            cutout_square = translate([k*dist_ribs, z_coord]) (
-                square(size=[thickness_material+2*tolerance, cutout_height], center=True)
-                )
-
-            if cutout_location == "outer":                  # enlarge very tiny cutouts towards the top
-                cutout_square += translate([k*dist_ribs-(thickness_material/2+tolerance), z_coord])(
-                square(size=[thickness_material+2*tolerance, 500], center=False)
-                )
-
-            rib_object = rib_object - cutout_square
-    """    
-
-    # Rib Hole cutouts circular ribs
-    # TODO: drawings machen
-    # TODO: Schräge Stege einbauen
-    # TODO: cutouts in Funktion packen - unterschied circular/ non circular koordinaten
-
-    smooth_rib_cutout = int(smoothness/number_of_ribs)
-
-    increment = (dist_ribs-2*rib_cutout_residue-thickness_material) / smooth_rib_cutout
-
-    for m in range(0, number_of_ribs):
-
-        start_polygon_x = m * dist_ribs + thickness_material / 2 + rib_cutout_residue
-        start_polygon_top_y = Circle_Coords_Z(start_polygon_x, rib_radius) - rib_cutout_residue
-        start_polygon_bot_y = Circle_Coords_Z(start_polygon_x, rib_radius) - arc_height_main_rib + rib_cutout_residue
-
-        polygon_rib_cutout_top = [[start_polygon_x, start_polygon_top_y]]
-        polygon_rib_cutout_bot = [[start_polygon_x, start_polygon_bot_y]]
-
-        lamp_cutout_bottom = lamp_base + rib_cutout_residue
-
-        # circular section of top cutout
-        for n in range(0, smooth_rib_cutout+1):
-            polygon_1_x = start_polygon_x + n*increment
-            polygon_1_y = Circle_Coords_Z(polygon_1_x, rib_radius) - rib_cutout_residue
-
-            # case 1: triangular cutout at rib end (complete polygon)
-            if (polygon_1_y < lamp_cutout_bottom) and (start_polygon_bot_y < lamp_cutout_bottom):
-                last_x, _ = polygon_rib_cutout_top[-1]
-                polygon_rib_cutout_top.append([last_x, lamp_cutout_bottom])
-                polygon_rib_cutout_top.append([start_polygon_x, lamp_cutout_bottom])
-                break
-
-            # case 1,5: cutout with circular and flat bottom at rib end
-            elif polygon_1_y < lamp_cutout_bottom:
-                break
-
-            # normal cutout, case 2 and case 3
-            else:
-                polygon_rib_cutout_top.append([polygon_1_x, polygon_1_y])
-
-        last_x_top, last_y_top = polygon_rib_cutout_top[-1]
-
-        # circular section of bottom cutout
-        for p in range(0, smooth_rib_cutout+1):
-            polygon_2_x = start_polygon_x + p*increment
-            polygon_2_y = Circle_Coords_Z(polygon_2_x, rib_radius) - arc_height_main_rib + rib_cutout_residue
-
-            # case 1
-            if (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top <= lamp_cutout_bottom):
-                break
-
-            # case 3
-            elif (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top > lamp_cutout_bottom):
-                polygon_rib_cutout_bot.append([polygon_2_x, lamp_cutout_bottom])
-                polygon_rib_cutout_bot.append([last_x_top, lamp_cutout_bottom])
-                break
-
-            # case 1,5 & 2
-            elif polygon_2_y < lamp_cutout_bottom:
-                last_x, _ = polygon_rib_cutout_bot[-1]
-                polygon_rib_cutout_bot.append([last_x + increment, lamp_cutout_bottom])
-                polygon_rib_cutout_bot.append([last_x_top, lamp_cutout_bottom])
-                break
-
-            # normal cutout
-            else:
-                polygon_rib_cutout_bot.append([polygon_2_x, polygon_2_y])
-
-        last_x_bot, last_y_bot = polygon_rib_cutout_bot[-1]     # will be needed für stiffening stuff in cutouts
-
-        polygon_rib_cutout = polygon_rib_cutout_top + polygon_rib_cutout_bot[::-1]
-
-        rib_object = difference()(
-            rib_object,
-            polygon(polygon_rib_cutout)
-        )
-
+    # mirror the half-rib to create full one
     rib_object = rib_object + mirror([1, 0, 0])(rib_object)
 
     return rib_object
 
 
 def DrawRib_NonCircular(rib_number, lamp_base):
-    # generates ribs in y-direction
+    # generates non-circular ribs (just the half of it) in y-direction
 
     increment = lamp_width_x / (2 * smoothness)
 
@@ -358,8 +347,7 @@ def DrawRib_NonCircular(rib_number, lamp_base):
             )
         )
 
-    # Square cutouts rib intersection non circular
-
+    # Square cutouts rib intersection non circular (for putting ribs together)
     dist_ribs = dist_ribs_x
     cutout_location = "inner"
     rib_radius = 0
@@ -367,110 +355,10 @@ def DrawRib_NonCircular(rib_number, lamp_base):
 
     rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'non_circular', rib_radius, rib_number)
 
-    """
-    for k in range(0, number_of_ribs):
+    # Rib Hole Rectangular cutouts non circular ribs
+    rib_object = Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, 'non_circular', rib_radius, rib_number)
 
-        z_coord = Non_Circular_Coords_Z(k * dist_ribs, rib_number)
-
-        if z_coord != -1:                                   # compliance - circle coordinate was calculated correctly
-
-            if z_coord - arc_height_main_rib < lamp_base:   # check if coord approaching lamp_base - room for cutout
-                cutout_height = z_coord - lamp_base         # if yes - limit cutout height
-            else:
-                cutout_height = arc_height_main_rib           
-
-            # long ribs are cut on the inner perimeter
-            if z_coord - arc_height_main_rib > lamp_base:
-                z_coord -= arc_height_main_rib          # in circular area inner perimeter
-            else:
-                z_coord = lamp_base                     # in flat area cut on flats
-
-            cutout_square = translate([k*dist_ribs, z_coord]) (
-            square(size=[thickness_material+2*tolerance, cutout_height], center=True)
-            )
-            
-            rib_object = rib_object - cutout_square
-    """
-
-        
-
-    # Rib Hole cutouts non circular ribs
-    # TODO: drawings machen
-    # TODO: Schräge Stege einbauen
-
-    smooth_rib_cutout = int(smoothness / number_of_ribs_x)
-
-    increment = (dist_ribs_x - 2 * rib_cutout_residue - thickness_material) / smooth_rib_cutout
-
-    for m in range(0, number_of_ribs_x):
-
-        start_polygon_x = m * dist_ribs_x + thickness_material / 2 + rib_cutout_residue
-        start_polygon_top_y = Non_Circular_Coords_Z(start_polygon_x, rib_number) - rib_cutout_residue
-        start_polygon_bot_y = Non_Circular_Coords_Z(start_polygon_x, rib_number) - arc_height_main_rib + rib_cutout_residue
-
-        polygon_rib_cutout_top = [[start_polygon_x, start_polygon_top_y]]
-        polygon_rib_cutout_bot = [[start_polygon_x, start_polygon_bot_y]]
-
-        lamp_cutout_bottom = lamp_base + rib_cutout_residue
-
-        # non circular section of top cutout
-        for n in range(0, smooth_rib_cutout + 1):
-            polygon_1_x = start_polygon_x + n * increment
-            polygon_1_y = Non_Circular_Coords_Z(polygon_1_x, rib_number) - rib_cutout_residue
-
-            # case 1: triangular cutout at rib end (complete polygon)
-            if (polygon_1_y < lamp_cutout_bottom) and (
-                    start_polygon_bot_y < lamp_cutout_bottom):
-                last_x, _ = polygon_rib_cutout_top[-1]
-                polygon_rib_cutout_top.append([last_x, lamp_cutout_bottom])
-                polygon_rib_cutout_top.append([start_polygon_x, lamp_cutout_bottom])
-                break
-
-            # case 1,5: cutout with circular and flat bottom at rib end
-            elif polygon_1_y < lamp_cutout_bottom:
-                break
-
-            # normal cutout, case 2 and case 3
-            else:
-                polygon_rib_cutout_top.append([polygon_1_x, polygon_1_y])
-
-        last_x_top, last_y_top = polygon_rib_cutout_top[-1]
-
-        # non circular section of bottom cutout
-        for p in range(0, smooth_rib_cutout + 1):
-            polygon_2_x = start_polygon_x + p * increment
-            polygon_2_y = Non_Circular_Coords_Z(polygon_2_x, rib_number) - arc_height_main_rib + rib_cutout_residue
-
-            # case 1
-            if (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top <= lamp_cutout_bottom):
-                break
-
-            # case 3
-            elif (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top > lamp_cutout_bottom):
-                polygon_rib_cutout_bot.append([polygon_2_x, lamp_cutout_bottom])
-                polygon_rib_cutout_bot.append([last_x_top, lamp_cutout_bottom])
-                break
-
-            # case 1,5 & 2
-            elif polygon_2_y < lamp_cutout_bottom:
-                last_x, _ = polygon_rib_cutout_bot[-1]
-                polygon_rib_cutout_bot.append([last_x + increment, lamp_cutout_bottom])
-                polygon_rib_cutout_bot.append([polygon_rib_cutout_top[-1][0], lamp_cutout_bottom])
-                break
-
-            # normal cutout
-            else:
-                polygon_rib_cutout_bot.append([polygon_2_x, polygon_2_y])
-
-        last_x_bot, last_y_bot = polygon_rib_cutout_bot[-1]  # will be needed für stiffening stuff in cutouts
-
-        polygon_rib_cutout = polygon_rib_cutout_top + polygon_rib_cutout_bot[::-1]
-
-        rib_object = difference()(
-            rib_object,
-            polygon(polygon_rib_cutout)
-        )
-
+    # mirror the half-rib to create full one
     rib_object = rib_object + mirror([1, 0, 0])(rib_object)
 
     return rib_object
