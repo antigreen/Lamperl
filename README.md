@@ -20,4 +20,5 @@ possible new features:
 - [ ] "low poly" variant with straight lines between the rib crossing points
 - [ ] GUI for configuration and preview of result 
 - [ ] generate laser-cutter ready dxf for given material sheet
+- [ ] add chamfers or fillets in the cutout corners
 
