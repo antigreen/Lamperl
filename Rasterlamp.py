@@ -1,5 +1,3 @@
-# source venv/bin/activate
-
 """
 Python Script for generating a lamp shade
 manufacturing method: laser cutting
@@ -11,11 +9,11 @@ SolidPython is a Python for OpenSCAD
 by Evan Jones, evan_t_jones@mac.com
 --> https://github.com/SolidCode/SolidPython
 
-Copyright (C) 2019 Thomas Minke - tom@der-pfusch.de
+Copyright (C) 2021 Thomas Minke - tom@der-pfusch.de
 
 License (similar and successors):
-Attribution-NonCommercial-ShareAlike 3.0 Unported (CC BY-NC-SA 3.0)
-https://creativecommons.org/licenses/by-nc-sa/3.0/
+Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
+https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 """
 
@@ -24,6 +22,8 @@ from solid.utils import *
 import math
 import os
 import subprocess
+
+from RibHoles import *
 
 # -------------------------------------------------------------------------------------------------------
 # adapt values below to define your lamp shade properties
@@ -38,22 +38,24 @@ lamp_width_x = 350  # in [mm] - for construction the longer side
 lamp_width_y = 250  # in [mm] - for construction the shorter side
 lamp_height = 100    # in [mm]
 arc_height_main_rib = 30  # in [mm] - width of arc
-number_of_ribs_long_side = 25   # just odd number - for the longer side - min. 3
+number_of_ribs_long_side = 9   # just odd number - for the longer side - min. 3
 number_of_ribs_short_side = -1   # just odd number - for the shorter side -  will be calculated if value = -1
-dist_rib_edge = 10  # in [mm] - distance last rib from the edge
+dist_rib_edge = 20  # in [mm] rib from the edge
 
 thickness_material = 3.0    # in [mm] - thickness of used material for lamp - adapt to your material thickness used
                             #           for manufacturing
-tolerance = 2.0             # in [mm] - tolerance for mechanical clearence 0.1-0.2mm recommended
+tolerance = 0.5             # in [mm] - tolerance for mechanical clearence 0.1-0.2mm recommended
                             # on a LaserCutter calculate Kerf in tolerance - if Kerf is 0.2mm -->
                             # set tolerance to 0mm
 
+chamfer = "yes"             # set "yes" if you like a chamfer
 rib_cutout_chamfer = 2      # in [mm] - chamfer in rib cutout corners - esthetics :o)
+
                             # see: Rib Hole cutouts (non) circular ribs
-rib_cutout_residue = 4.0    # in [mm] - remaining material left after cutout - recommencation --> depends on material...and aesthetics
+rib_cutout_residue = 4    # in [mm] - remaining material left after cutout - recommencation --> depends on material...and aesthetics
 
 # set view for showing in Openscad
-# view = "2D_plotting"      # drawstyle in SCAD 2D_plotting for 2D show
+#view = "2D_plotting"      # drawstyle in SCAD 2D_plotting for 2D show
 # view = "2D_cutting"     # drawstyle in SCAD 2D_cutting for generating G-Code
 view = "3D_show"        # drawstyle in SCAD 2D_plotting for generating G-Code, 3D_show for show
 
@@ -185,98 +187,6 @@ def Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lam
     return rib_object
 
 
-def Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, shape, rib_radius, rib_number=0):
-    # cuts out the "holes" in the ribs for aesthetics
-    
-    smooth_rib_cutout = int(smoothness / number_of_ribs)
-
-    increment = (dist_ribs-2*rib_cutout_residue-thickness_material) / smooth_rib_cutout
-
-    for m in range(0, number_of_ribs):
-
-        start_polygon_x = m * dist_ribs + thickness_material / 2 + rib_cutout_residue
-        
-        if shape == 'non_circular':
-            start_polygon_top_y = Non_Circular_Coords_Z(start_polygon_x, rib_number) - rib_cutout_residue
-            start_polygon_bot_y = Non_Circular_Coords_Z(start_polygon_x, rib_number) - arc_height_main_rib + rib_cutout_residue
-        elif shape == 'circular':
-            start_polygon_top_y = Circle_Coords_Z(start_polygon_x, rib_radius) - rib_cutout_residue
-            start_polygon_bot_y = Circle_Coords_Z(start_polygon_x, rib_radius) - arc_height_main_rib + rib_cutout_residue
-
-
-        polygon_rib_cutout_top = [[start_polygon_x, start_polygon_top_y]]
-        polygon_rib_cutout_bot = [[start_polygon_x, start_polygon_bot_y]]
-
-        lamp_cutout_bottom = lamp_base + rib_cutout_residue
-
-        # curved section of top cutout
-        for n in range(0, smooth_rib_cutout + 1):
-            polygon_1_x = start_polygon_x + n * increment
-            
-            if shape == 'non_circular':
-                polygon_1_y = Non_Circular_Coords_Z(polygon_1_x, rib_number) - rib_cutout_residue
-            elif shape == 'circular':
-                polygon_1_y = Circle_Coords_Z(polygon_1_x, rib_radius) - rib_cutout_residue
-
-            # case 1: triangular cutout at rib end (complete polygon)
-            if (polygon_1_y < lamp_cutout_bottom) and (start_polygon_bot_y < lamp_cutout_bottom):
-                last_x, _ = polygon_rib_cutout_top[-1]
-                polygon_rib_cutout_top.append([last_x, lamp_cutout_bottom])
-                polygon_rib_cutout_top.append([start_polygon_x, lamp_cutout_bottom])
-                break
-
-            # case 1,5: cutout with circular and flat bottom at rib end
-            elif polygon_1_y < lamp_cutout_bottom:
-                break
-
-            # normal cutout, case 2 and case 3
-            else:
-                polygon_rib_cutout_top.append([polygon_1_x, polygon_1_y])
-
-        last_x_top, last_y_top = polygon_rib_cutout_top[-1]
-
-        # curved section of bottom cutout
-        for p in range(0, smooth_rib_cutout + 1):
-            polygon_2_x = start_polygon_x + p * increment
-            
-            if shape == 'non_circular':
-                polygon_2_y = Non_Circular_Coords_Z(polygon_2_x, rib_number) - arc_height_main_rib + rib_cutout_residue
-            elif shape == 'circular':
-                polygon_2_y = Circle_Coords_Z(polygon_2_x, rib_radius) - arc_height_main_rib + rib_cutout_residue
-
-            # case 1
-            if (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top <= lamp_cutout_bottom):
-                break
-
-            # case 3
-            elif (start_polygon_bot_y < lamp_cutout_bottom) and (last_y_top > lamp_cutout_bottom):
-                polygon_rib_cutout_bot.append([polygon_2_x, lamp_cutout_bottom])
-                polygon_rib_cutout_bot.append([last_x_top, lamp_cutout_bottom])
-                break
-
-            # case 1,5 & 2
-            elif polygon_2_y < lamp_cutout_bottom:
-                last_x, _ = polygon_rib_cutout_bot[-1]
-                polygon_rib_cutout_bot.append([last_x + increment, lamp_cutout_bottom])
-                polygon_rib_cutout_bot.append([last_x_top, lamp_cutout_bottom])
-                break
-
-            # normal cutout
-            else:
-                polygon_rib_cutout_bot.append([polygon_2_x, polygon_2_y])
-
-        last_x_bot, last_y_bot = polygon_rib_cutout_bot[-1]  # will be needed für stiffening stuff in cutouts
-
-        polygon_rib_cutout = polygon_rib_cutout_top + polygon_rib_cutout_bot[::-1]
-
-        rib_object = difference()(
-            rib_object,
-            polygon(polygon_rib_cutout)
-        )
-
-    return rib_object
-
-
 def DrawRib_Circular(rib_radius, lamp_base, move_direction):
     # generates circular ribs (just the half of it) (rib_y[0] and ribs_x[n])
 
@@ -313,7 +223,10 @@ def DrawRib_Circular(rib_radius, lamp_base, move_direction):
     rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'circular', rib_radius)
  
     # Rib Hole Rectangular cutouts circular ribs
-    rib_object = Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, 'circular', rib_radius)
+    if chamfer == "yes":
+        rib_object = Rib_Holes_Rectangular_Chamfer(rib_object, number_of_ribs, dist_ribs, lamp_base, 'circular', rib_radius, rib_cutout_chamfer)
+    else:
+        rib_object = Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, 'circular', rib_radius)
 
     # mirror the half-rib to create full one
     rib_object = rib_object + mirror([1, 0, 0])(rib_object)
@@ -356,7 +269,10 @@ def DrawRib_NonCircular(rib_number, lamp_base):
     rib_object = Rect_Rib_Cutouts(rib_object, number_of_ribs, dist_ribs, cutout_location, lamp_base, 'non_circular', rib_radius, rib_number)
 
     # Rib Hole Rectangular cutouts non circular ribs
-    rib_object = Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, 'non_circular', rib_radius, rib_number)
+    if chamfer == "yes":
+        rib_object = Rib_Holes_Rectangular_Chamfer(rib_object, number_of_ribs, dist_ribs, lamp_base, 'non_circular',rib_radius, rib_cutout_chamfer,rib_number)
+    else:
+        rib_object = Rib_Holes_Rectangular(rib_object, number_of_ribs, dist_ribs, lamp_base, 'non_circular', rib_radius, rib_number)
 
     # mirror the half-rib to create full one
     rib_object = rib_object + mirror([1, 0, 0])(rib_object)
@@ -414,8 +330,52 @@ def Generate_OpenSCAD_view(rib_object, direction, i):
 
     return rib_object
 
+def debugging_stuff():
+    SCAD_codelist = []          # empty list for storing the different solid-python objects
 
-if __name__ == "__main__":
+    # calculate circular ribs Rib_y_0 and Rib_x_[n]
+
+    # the "x", "y" and "ny" indicators are for providing the movement direction of ribs as well as
+    # square cutout indicators
+
+    # calculate circular ribs Rib_y_0
+    #rib_0_y = Generate_OpenSCAD_view(DrawRib_Circular(radius_0_y, lamp_base_y, "y"), "y", 0)
+    #SCAD_codelist.append(scad_render(rib_0_y))  # render the SCAD-objects to SCAD-text
+
+    # calculate circular ribs Rib_x_[n]
+    
+    '''
+    for k in range(0, number_of_ribs_x):
+        if k == 0:
+            radius = radius_0_x
+        else:
+            radius = radius_0_x - (radius_0_y - Circle_Coords_Z(k * dist_ribs_x, radius_0_y))
+
+        rib_x_n = Generate_OpenSCAD_view(DrawRib_Circular(radius, lamp_base_x, "x"), "x", k)
+        SCAD_codelist.append(scad_render(rib_x_n))  # render the SCAD-objects to SCAD-text
+    '''
+    
+    k=3
+    if k == 0:
+            radius = radius_0_x
+    else:
+        radius = radius_0_x - (radius_0_y - Circle_Coords_Z(k * dist_ribs_x, radius_0_y))
+
+        rib_x_n = Generate_OpenSCAD_view(DrawRib_Circular(radius, lamp_base_x, "x"), "x", k)
+        SCAD_codelist.append(scad_render(rib_x_n))  # render the SCAD-objects to SCAD-text
+
+    
+    # calculate non-circular ribs Rib_y_[1...m]
+    
+    '''
+    for m in range(1, number_of_ribs_y):    # start at '1' cause rib_0_y is already created
+        rib_y_n = Generate_OpenSCAD_view(DrawRib_NonCircular(m, lamp_base_x), "ny", m)
+        SCAD_codelist.append(scad_render(rib_y_n))  # render the SCAD-objects to SCAD-text
+    '''
+    return SCAD_codelist
+    
+
+def main_function():
     SCAD_codelist = []          # empty list for storing the different solid-python objects
 
     # calculate circular ribs Rib_y_0 and Rib_x_[n]
@@ -444,6 +404,13 @@ if __name__ == "__main__":
     for m in range(1, number_of_ribs_y):    # start at '1' cause rib_0_y is already created
         rib_y_n = Generate_OpenSCAD_view(DrawRib_NonCircular(m, lamp_base_x), "ny", m)
         SCAD_codelist.append(scad_render(rib_y_n))  # render the SCAD-objects to SCAD-text
+
+    return SCAD_codelist
+
+if __name__ == "__main__":
+    
+    SCAD_codelist = main_function()
+    #SCAD_codelist = debugging_stuff()
     
     # combine the SCAD-text and write to the named file
     
@@ -465,10 +432,10 @@ if __name__ == "__main__":
 
     # export 2D-View as dxf in same folder as SCAD-file
     if view == "2D_plotting":
-        subprocess.run(["openscad", "-o", file_out_dxf, file_out_scad])
+        #subprocess.run(["openscad", "-o", file_out_dxf, file_out_scad])
         subprocess.run(["openscad", "-o", file_out_svg, file_out_scad])
 
-    elif view == "3D_show":
+    if view == "3D_show":
         subprocess.run(["openscad", "-o", file_out_png, "--imgsize=1600,1200",
                         "--camera=0,-100,100,60,0,20,1200", file_out_scad])
         # examples for working command line options

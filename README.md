@@ -1,7 +1,9 @@
 # Lamperl
 
 Prototype for a small Python Script to generate lampshades.  
-The script generates a dxf with all rib variants to assemble the generated lamphade  
+The script generates a dxf with all rib variants to lasercut and assemble the generated lamphade  
+The CAD behind is OpenSCAD - programmed by Python using the lib SolidPython by Evan Jones --> https://github.com/SolidCode/SolidPython  
+
 ### 3D-View:  
 ![Lamperl 3D](images/Lamperl.png)
 
@@ -12,7 +14,7 @@ The script generates a dxf with all rib variants to assemble the generated lamph
 
 ### ToDos
 Code refactoring is necessary - especially in areas of big cutouts
-- [ ] new implementation as general function for circualar and non-circualr ribs
+
 - [ ] new shapes for cutouts (circles, ellipses, rounded or chamfered corners, diagonal bracings, ...)
 - [ ] take care about very small edges - which might get instable
 
